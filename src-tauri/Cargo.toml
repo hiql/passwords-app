@@ -1,0 +1,24 @@
+[package]
+name = "passwords-app"
+version = "0.1.0"
+description = "A random password generator"
+authors = ["hiql<dev.hiql@icloud.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "passwords_app_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0-rc", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0-rc", features = [] }
+tauri-plugin-shell = "2.0.0-rc"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+passwords = "3.1.16"
+tauri-plugin-clipboard-manager = "2.1.0-beta.7"
+rand = "0.8.5"
