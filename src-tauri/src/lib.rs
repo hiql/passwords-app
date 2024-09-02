@@ -1,4 +1,6 @@
 use passwords::{analyzer, scorer, PasswordGenerator};
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri_plugin_shell::ShellExt;
 
 mod syllables;
 mod words;
@@ -66,6 +68,34 @@ fn score(password: &str) -> f64 {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let github = MenuItemBuilder::new("Github").id("github").build(app)?;
+            let app_submenu = SubmenuBuilder::new(app, "App")
+                .about(Some(AboutMetadata {
+                    ..Default::default()
+                }))
+                .separator()
+                .item(&github)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .quit()
+                .build()?;
+            let menu = MenuBuilder::new(app).items(&[&app_submenu]).build()?;
+
+            app.set_menu(menu)?;
+            app.on_menu_event(move |app, event| {
+                if event.id() == github.id() {
+                    let _ = app
+                        .shell()
+                        .open("https://github.com/hiql/passwords-app", None);
+                }
+            });
+
+            Ok(())
+        })
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
