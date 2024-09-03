@@ -19,6 +19,6 @@ tauri = { version = "2.0.0-rc", features = [] }
 tauri-plugin-shell = "2.0.0-rc"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-passwords = "3.1.16"
+passwords = { version = "3.1.16", features = ["common-password", "crypto"] }
 tauri-plugin-clipboard-manager = "2.1.0-beta.7"
 rand = "0.8.5"

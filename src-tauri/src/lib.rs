@@ -65,6 +65,11 @@ fn score(password: &str) -> f64 {
     scorer::score(&analyzer::analyze(password))
 }
 
+#[tauri::command]
+fn is_common_password(password: &str) -> bool {
+    analyzer::is_common_password(password)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -102,7 +107,8 @@ pub fn run() {
             gen_password,
             gen_pin,
             gen_words,
-            score
+            score,
+            is_common_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
