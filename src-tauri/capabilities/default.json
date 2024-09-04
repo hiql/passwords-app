@@ -13,6 +13,7 @@
     "core:event:allow-listen",
     "shell:allow-open",
     "clipboard-manager:default",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
   ]
 }

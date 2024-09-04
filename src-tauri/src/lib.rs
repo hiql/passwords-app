@@ -1,4 +1,7 @@
+use base64::{prelude::BASE64_STANDARD, Engine};
 use passwords::{analyzer, scorer, PasswordGenerator};
+use sha2::{Digest, Sha256, Sha512};
+use zxcvbn::zxcvbn;
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri_plugin_shell::ShellExt;
 
@@ -6,7 +9,13 @@ mod syllables;
 mod words;
 
 #[tauri::command]
-fn gen_password(length: usize, numbers: bool, symbols: bool, uppercase: bool) -> String {
+fn gen_password(
+    length: usize,
+    numbers: bool,
+    symbols: bool,
+    uppercase: bool,
+    exclude_similar_characters: bool,
+) -> String {
     let pg = PasswordGenerator {
         length,
         numbers,
@@ -14,7 +23,7 @@ fn gen_password(length: usize, numbers: bool, symbols: bool, uppercase: bool) ->
         uppercase_letters: uppercase,
         symbols,
         spaces: false,
-        exclude_similar_characters: false,
+        exclude_similar_characters,
         strict: true,
     };
     pg.generate_one().unwrap()
@@ -70,6 +79,44 @@ fn is_common_password(password: &str) -> bool {
     analyzer::is_common_password(password)
 }
 
+#[tauri::command]
+fn md5(password: &str) -> String {
+    let digest = md5::compute(password.as_bytes());
+    format!("{:x}", digest)
+}
+
+#[tauri::command]
+fn bcrypt(password: &str) -> String {
+    bcrypt::hash(&password, 10).unwrap()
+}
+
+#[tauri::command]
+fn base64(password: &str) -> String {
+    BASE64_STANDARD.encode(password.as_bytes())
+}
+
+#[tauri::command]
+fn sha256(password: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    let result = hasher.finalize();
+    hex::encode(result)
+}
+
+#[tauri::command]
+fn sha512(password: &str) -> String {
+    let mut hasher = Sha512::new();
+    hasher.update(password.as_bytes());
+    let result = hasher.finalize();
+    hex::encode(result)
+}
+
+#[tauri::command]
+fn crack_times(password: &str) -> String {
+    let entropy = zxcvbn(password, &[]);
+    entropy.crack_times().offline_slow_hashing_1e4_per_second().to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -108,7 +155,13 @@ pub fn run() {
             gen_pin,
             gen_words,
             score,
-            is_common_password
+            is_common_password,
+            md5,
+            base64,
+            bcrypt,
+            sha256,
+            sha512,
+            crack_times
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
