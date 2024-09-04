@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { UnlistenFn } from "@tauri-apps/api/event";
@@ -21,22 +21,33 @@ import {
   Heading,
   Separator,
   TextArea,
+  IconButton,
+  Checkbox,
+  RadioGroup,
+  Spinner,
+  Table,
 } from "@radix-ui/themes";
 import {
-  ClipboardIcon,
+  BookOpenIcon,
+  CheckIcon,
   ClipboardPasteIcon,
+  CopyIcon,
+  DraftingCompassIcon,
   FlaskConicalIcon,
   HashIcon,
   LightbulbIcon,
   PaintbrushIcon,
+  ShieldCheckIcon,
   ShuffleIcon,
+  SignatureIcon,
   SquareAsteriskIcon,
   WandIcon,
 } from "lucide-react";
 import "@radix-ui/themes/styles.css";
 import "./App.css";
-import { isDigit, isLetter, useCopy, useDebounce } from "./utils";
+import { isDigit, isLetter, useCopy, useDebounce, useHover } from "./utils";
 import useResizeObserver from "use-resize-observer";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 
 export const useTheme = () => {
   const [theme, setTheme] = useState<"light" | "dark" | "inherit">("inherit");
@@ -99,6 +110,23 @@ const getStrengthColor = (score: number): BadgeProps["color"] | undefined => {
   }
 };
 
+interface AnalyzedResult {
+  password: string;
+  length: number;
+  spaces_count: number;
+  numbers_count: number;
+  lowercase_letters_count: number;
+  uppercase_letters_count: number;
+  symbols_count: number;
+  other_characters_count: number;
+  consecutive_count: number;
+  non_consecutive_count: number;
+  progressive_count: number;
+  is_common: boolean;
+  crack_times?: string;
+  score: number;
+}
+
 function App() {
   const [panelType, setPanelType] = useState("generator");
   const [passwordType, setPasswordType] = useState("random");
@@ -108,7 +136,6 @@ function App() {
   const [randomUppercase, setRandomUppercase] = useState(true);
   const [randomExcludeSimilarCharacters, setRandomExcludeSimilarCharacters] =
     useState(false);
-
   const [memorableLength, setMemorableLength] = useState(4);
   const [memorableUseFullWords, setMemorableUseFullWords] = useState(true);
   const [memorableCapitalizeFirstLetter, setMemorableCapitalizeFirstLetter] =
@@ -121,15 +148,22 @@ function App() {
     useState<BadgeProps["color"]>(undefined);
   const [crackTime, setCrackTime] = useState("");
   const [password, setPassword] = useState("");
-  const [isCommon, setIsCommon] = useState(-1);
-
   const [hashPassword, setHashPassword] = useState("");
   const [md5String, setMd5String] = useState("");
   const [md5Uppercase, setMd5Uppercase] = useState(false);
   const [bcryptString, setBcryptString] = useState("");
   const [base64String, setBase64String] = useState("");
+  const [shaType, setShaType] = useState("256");
+  const [sha1String, setSha1String] = useState("");
+  const [sha224String, setSha224String] = useState("");
   const [sha256String, setSha256String] = useState("");
+  const [sha384String, setSha384String] = useState("");
   const [sha512String, setSha512String] = useState("");
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [analysisPassword, setAnalysisPassword] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<AnalyzedResult | null>(
+    null
+  );
 
   const theme = useTheme();
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
@@ -182,13 +216,30 @@ function App() {
     resetCopyStatus();
   }
 
-  async function isCommonPassword(password: string) {
-    return await invoke("is_common_password", {
-      password,
-    });
+  async function analyzeAsync() {
+    if (analysisPassword) {
+      let obj: AnalyzedResult = await invoke("analyze", {
+        password: analysisPassword,
+      });
+
+      const score: number = await invoke("score", {
+        password: analysisPassword,
+      });
+      obj.score = score;
+
+      obj.crack_times = await invoke("crack_times", {
+        password: analysisPassword,
+      });
+
+      console.log(obj);
+      setAnalysisResult(obj as any);
+    } else {
+      setAnalysisResult(null);
+    }
   }
 
   async function hashAsync() {
+    setIsCalculating(true);
     if (hashPassword) {
       const md5: string = await invoke("md5", {
         password: hashPassword,
@@ -216,12 +267,39 @@ function App() {
     }
 
     if (hashPassword) {
+      const sha1: string = await invoke("sha1", {
+        password: hashPassword,
+      });
+      setSha1String(sha1);
+    } else {
+      setSha1String("");
+    }
+
+    if (hashPassword) {
+      const sha224: string = await invoke("sha224", {
+        password: hashPassword,
+      });
+      setSha224String(sha224);
+    } else {
+      setSha224String("");
+    }
+
+    if (hashPassword) {
       const sha256: string = await invoke("sha256", {
         password: hashPassword,
       });
       setSha256String(sha256);
     } else {
       setSha256String("");
+    }
+
+    if (hashPassword) {
+      const sha384: string = await invoke("sha384", {
+        password: hashPassword,
+      });
+      setSha384String(sha384);
+    } else {
+      setSha384String("");
     }
 
     if (hashPassword) {
@@ -232,9 +310,11 @@ function App() {
     } else {
       setSha512String("");
     }
+    setIsCalculating(false);
   }
 
   const hash = useDebounce(hashPassword, 400);
+  const analyze = useDebounce(analysisPassword, 400);
 
   useEffect(() => {
     random_password();
@@ -264,6 +344,10 @@ function App() {
     hashAsync();
   }, [hash]);
 
+  useEffect(() => {
+    analyzeAsync();
+  }, [analyze]);
+
   const copy = async () => {
     await copyToClipboard(password);
   };
@@ -277,10 +361,6 @@ function App() {
       pin();
     }
   }, [passwordType]);
-
-  useEffect(() => {
-    setHashPassword(password);
-  }, [password]);
 
   async function setWindowHeight(height: number) {
     await getCurrentWindow().setSize(new LogicalSize(480, height));
@@ -322,8 +402,13 @@ function App() {
                 Analyzer
               </Flex>
             </Tabs.Trigger>
+            <Tabs.Trigger value="principles">
+              <Flex gap="2" align="center">
+                <BookOpenIcon size={16} />
+                Principles
+              </Flex>
+            </Tabs.Trigger>
           </Tabs.List>
-
           <Box px="5" py="4">
             <Tabs.Content value="generator">
               <Flex direction="column" gap="2">
@@ -355,7 +440,6 @@ function App() {
                     </Flex>
                   </RadioCards.Item>
                 </RadioCards.Root>
-
                 <Text weight="medium">Customize your password</Text>
                 {passwordType === "random" ? (
                   <Flex direction="column" gap="4" my="2">
@@ -431,7 +515,6 @@ function App() {
                       </Box>
                     </Flex>
                     <Separator size="4" />
-
                     <Flex gap="4" align="center">
                       <Text color="gray">Capitalize</Text>
                       <Switch
@@ -454,9 +537,7 @@ function App() {
                         }}
                       />
                     </Flex>
-
                     <Separator size="4" />
-
                     <Flex gap="4" align="center">
                       <Text color="gray">Use full words</Text>
                       <Switch
@@ -553,26 +634,14 @@ function App() {
                     </DataList.Root>
                   </Grid>
                 ) : null}
-
-                {/* <Text as="label" size="2" mt="3">
-                  <Flex gap="2">
-                    <Checkbox
-                      checked={copyAsBase64String}
-                      onCheckedChange={(checked) => {
-                        console.log(checked);
-                        setCopyAsBase64String(checked as boolean);
-                      }}
-                    />
-                    Copy as BASE64 string
-                  </Flex>
-                </Text> */}
-
                 <Grid columns="2" gap="4" width="auto" my="2">
                   <Button
                     size="3"
                     variant="solid"
                     color={isCopied ? "green" : undefined}
                     onClick={() => {
+                      setHashPassword(password);
+                      setAnalysisPassword(password);
                       copy();
                     }}
                   >
@@ -598,126 +667,307 @@ function App() {
             </Tabs.Content>
             <Tabs.Content value="analyzer">
               <Flex mb="5" direction="column">
-                <Box width="100%">
-                  <TextField.Root
-                    size="3"
-                    placeholder="Enter a password..."
-                    onChange={async (e) => {
-                      const value = e.currentTarget.value.trim();
-                      if (!value) {
-                        setIsCommon(-1);
-                        return;
-                      }
-                      const b = await isCommonPassword(value);
-                      if (b) {
-                        setIsCommon(1);
-                      } else {
-                        setIsCommon(0);
-                      }
-                    }}
-                  />
-                </Box>
-
-                {isCommon !== -1 ? (
-                  <Flex height="32px" align="center">
-                    <Text my="2" mr="2" color="gray">
-                      Your password is
-                    </Text>
-                    {isCommon === 1 ? (
-                      <Text weight="medium" color="red">
-                        Common
-                      </Text>
-                    ) : isCommon === 0 ? (
-                      <Text weight="medium" color="green">
-                        Not Common
-                      </Text>
-                    ) : null}
-                  </Flex>
-                ) : null}
+                <TextArea
+                  placeholder="Enter or paste password here..."
+                  value={analysisPassword}
+                  rows={3}
+                  onChange={(e) => setAnalysisPassword(e.currentTarget.value)}
+                />
               </Flex>
-              <Flex direction="column" gap="3" mb="5">
-                <Heading size="4">
+              <Card mb="2" style={{ padding: 0 }}>
+                <Table.Root size="2">
+                  <Table.Body>
+                    <Table.Row>
+                      <Table.Cell>Score</Table.Cell>
+                      <Table.Cell>{analysisResult?.score}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Strength</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult ? (
+                          <Badge color={getStrengthColor(analysisResult.score)}>
+                            {getStrengthString(analysisResult.score)}
+                          </Badge>
+                        ) : null}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Number of characters</Table.Cell>
+                      <Table.Cell>{analysisResult?.length}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Lowercase letters</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.lowercase_letters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Uppercase letters</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.uppercase_letters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Numbers</Table.Cell>
+                      <Table.Cell>{analysisResult?.numbers_count}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Spaces</Table.Cell>
+                      <Table.Cell>{analysisResult?.spaces_count}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Symbols</Table.Cell>
+                      <Table.Cell>{analysisResult?.symbols_count}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Other characters</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.other_characters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Consecutive repeated characters</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.consecutive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        Non consecutive repeated characters
+                      </Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.non_consecutive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Progressive characters</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult?.progressive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Common password</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult
+                          ? analysisResult.is_common
+                            ? "Yes"
+                            : "No"
+                          : ""}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>Estimated time to crack</Table.Cell>
+                      <Table.Cell>{analysisResult?.crack_times}</Table.Cell>
+                    </Table.Row>
+                  </Table.Body>
+                </Table.Root>
+                <Flex></Flex>
+              </Card>
+            </Tabs.Content>
+            <Tabs.Content value="hasher">
+              <Flex direction="column" gap="3">
+                <TextArea
+                  placeholder="Enter or paste password here..."
+                  value={hashPassword}
+                  rows={3}
+                  onChange={(e) => setHashPassword(e.currentTarget.value)}
+                />
+                <Flex align="center" gap="4" justify="end" pr="2" mb="4">
+                  <Flex align="center" gap="4">
+                    <Button
+                      variant="ghost"
+                      size="1"
+                      onClick={async () => {
+                        const clipboardText = await readText();
+                        setHashPassword(clipboardText);
+                      }}
+                    >
+                      <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="1"
+                      onClick={() => setHashPassword("")}
+                    >
+                      <PaintbrushIcon size={16} strokeWidth={1} /> Clear
+                    </Button>
+                  </Flex>
+                </Flex>
+                <TextBox
+                  label="MD5"
+                  text={md5Uppercase ? md5String.toUpperCase() : md5String}
+                  placeholder="MD5 is a hashing function that creates a unique 128-bit hash with 32 characters long for every string."
+                  toolbar={
+                    <Flex gap="4" align="center" p="1">
+                      <Text as="label" size="2">
+                        <Flex gap="2">
+                          <Checkbox
+                            checked={md5Uppercase}
+                            onCheckedChange={(checked) =>
+                              setMd5Uppercase(checked as boolean)
+                            }
+                          />
+                          Uppercase
+                        </Flex>
+                      </Text>
+                    </Flex>
+                  }
+                />
+                <TextBox
+                  label="BCrypt"
+                  text={bcryptString}
+                  placeholder="BCrypt is a password-hashing function based on the Blowfish cipher."
+                />
+                <TextBox
+                  label="SHA"
+                  text={
+                    shaType === "1"
+                      ? sha1String
+                      : shaType === "224"
+                      ? sha224String
+                      : shaType === "256"
+                      ? sha256String
+                      : shaType === "384"
+                      ? sha384String
+                      : shaType === "512"
+                      ? sha512String
+                      : ""
+                  }
+                  rows={3}
+                  placeholder={
+                    shaType === "1"
+                      ? "SHA1 has a 160-bit hash output which corresponds to a 40 character string."
+                      : shaType === "224"
+                      ? "SHA224 is a hashing function that creates a unique 224-bit hash with 56 characters long for every string."
+                      : shaType === "256"
+                      ? "SHA256 is a hashing function that creates a unique 256-bit hash with 64 characters long for every string."
+                      : shaType === "384"
+                      ? "SHA384 is a hashing function that creates a unique 384-bit hash with 96 characters long for every string."
+                      : shaType === "512"
+                      ? "SHA512 is a hashing function that creates a unique 512-bit hash with 128 characters long for every string."
+                      : ""
+                  }
+                  toolbar={
+                    <RadioGroup.Root value={shaType} onValueChange={setShaType}>
+                      <Flex align="center" gap="4" pr="2">
+                        <RadioGroup.Item value="1">1</RadioGroup.Item>
+                        <RadioGroup.Item value="224">224</RadioGroup.Item>
+                        <RadioGroup.Item value="256">256</RadioGroup.Item>
+                        <RadioGroup.Item value="384">384</RadioGroup.Item>
+                        <RadioGroup.Item value="512">512</RadioGroup.Item>
+                      </Flex>
+                    </RadioGroup.Root>
+                  }
+                />
+                <TextBox
+                  label="Base64"
+                  text={base64String}
+                  rows={3}
+                  placeholder="Base64 is a binary-to-text encoding scheme."
+                />
+                <Flex align="center" gap="4" justify="center" height="12px">
+                  {isCalculating ? (
+                    <>
+                      <Spinner />
+                      <Text color="gray">calculating...</Text>
+                    </>
+                  ) : null}
+                </Flex>
+              </Flex>
+            </Tabs.Content>
+            <Tabs.Content value="principles">
+              <Flex direction="column" gap="4" p="4">
+                <Heading size="6" mb="4">
                   The principles of generating a strong password
                 </Heading>
-                <Heading size="3">Make it unique</Heading>
-                <Text size="2" color="gray">
+                <Flex gap="4" align="center">
+                  <SignatureIcon strokeWidth={1} />
+                  <Heading size="5" align="center">
+                    Make it unique
+                  </Heading>
+                </Flex>
+                <Text size="3" color="gray">
                   Passwords should be unique to different accounts. This reduces
                   the likelihood that multiple accounts of yours could be hacked
                   if one of your passwords is exposed in a data breach.
                 </Text>
-                <Heading size="3">Make it random</Heading>
-                <Text size="2" color="gray">
+                <Flex gap="4" align="center">
+                  <ShuffleIcon strokeWidth={1} />
+                  <Heading size="5" align="center">
+                    Make it random
+                  </Heading>
+                </Flex>
+                <Text size="3" color="gray">
                   The password has a combination of uppercase and lowercase
                   letters, numbers, special characters, and words with no
                   discernable pattern, unrelated to your personal information.
                 </Text>
-                <Heading size="3">Make it long</Heading>
-                <Text size="2" color="gray">
+                <Flex gap="4" align="center">
+                  <DraftingCompassIcon strokeWidth={1} />
+                  <Heading size="5" align="center">
+                    Make it long
+                  </Heading>
+                </Flex>
+                <Text size="3" color="gray">
                   The password consists of 14 characters or longer. An
                   8-character password will take a hacker 39 minutes to crack
                   while a 16-character password will take a hacker a billion
                   years to crack.
                 </Text>
               </Flex>
-            </Tabs.Content>
-            <Tabs.Content value="hasher">
-              <Flex direction="column" gap="3" mb="5">
-                <TextArea
-                  placeholder="Enter or paste password here..."
-                  value={hashPassword}
-                  onChange={(e) => setHashPassword(e.currentTarget.value)}
-                />
-                <Flex align="center" gap="4" justify="end" mb="4">
-                  <Button variant="ghost" size="1">
-                    <ClipboardPasteIcon size={12} strokeWidth={1} /> Paste
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="1"
-                    onClick={() => setHashPassword("")}
-                  >
-                    <PaintbrushIcon size={12} strokeWidth={1} /> Clear
-                  </Button>
-                </Flex>
-                <Flex align="center" justify="between">
-                  <Text weight="medium">MD5</Text>
-                  <Flex gap="4" align="center">
-                    <Text color="gray">Uppercase</Text>
-                    <Switch
-                      checked={md5Uppercase}
-                      onCheckedChange={setMd5Uppercase}
-                    />
-                  </Flex>
-                </Flex>
-                <Box position="relative">
-                  <TextArea
-                    readOnly
-                    value={md5Uppercase ? md5String.toUpperCase() : md5String}
-                  />
-                  <Box position="absolute" top="2" right="2">
-                    <Button
-                      variant="soft"
-                      size="2"
-                      onClick={() => setHashPassword("")}
-                    >
-                      <ClipboardIcon size={16} strokeWidth={1} />
-                    </Button>
-                  </Box>
-                </Box>
-                <Text weight="medium">BCrypt</Text>
-                <TextArea readOnly value={bcryptString} />
-                <Text weight="medium">SHA256</Text>
-                <TextArea readOnly value={sha256String} />
-                <Text weight="medium">SHA512</Text>
-                <TextArea readOnly rows={3} value={sha512String} />
-                <Text weight="medium">Base64</Text>
-                <TextArea readOnly rows={3} value={base64String} />
+              <Flex align="center" justify="center" p="4">
+                <ShieldCheckIcon size={32} color="gray" strokeWidth={1} />
               </Flex>
             </Tabs.Content>
           </Box>
         </Tabs.Root>
       </Box>
     </Theme>
+  );
+}
+
+function TextBox({
+  label,
+  text,
+  placeholder,
+  rows,
+  toolbar,
+}: {
+  label: string;
+  text: string;
+  placeholder?: string;
+  rows?: number;
+  toolbar?: ReactNode;
+}) {
+  const { isCopied, copyToClipboard } = useCopy();
+  const { hovered, ref } = useHover();
+
+  return (
+    <Flex direction="column" gap="2">
+      <Flex justify="between">
+        <Text weight="medium">{label}</Text>
+        {toolbar}
+      </Flex>
+      <Box position="relative" ref={ref}>
+        <TextArea
+          readOnly
+          rows={rows || undefined}
+          value={text}
+          placeholder={placeholder}
+        />
+        <Box position="absolute" top="2" right="2">
+          {hovered && text ? (
+            <IconButton size="2" onClick={() => copyToClipboard(text)}>
+              {isCopied ? (
+                <CheckIcon size={16} strokeWidth={1} />
+              ) : (
+                <CopyIcon size={16} strokeWidth={1} />
+              )}
+            </IconButton>
+          ) : null}
+        </Box>
+      </Box>
+    </Flex>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 export function useCopy() {
@@ -42,6 +42,29 @@ export function useDebounce<T>(value: T, delay: number): T {
     [value, delay] // Only re-call effect if value or delay changes
   );
   return debouncedValue;
+}
+
+export function useHover<T extends HTMLElement = HTMLDivElement>() {
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<T>(null);
+  const onMouseEnter = useCallback(() => setHovered(true), []);
+  const onMouseLeave = useCallback(() => setHovered(false), []);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.addEventListener("mouseenter", onMouseEnter);
+      ref.current.addEventListener("mouseleave", onMouseLeave);
+
+      return () => {
+        ref.current?.removeEventListener("mouseenter", onMouseEnter);
+        ref.current?.removeEventListener("mouseleave", onMouseLeave);
+      };
+    }
+
+    return undefined;
+  }, []);
+
+  return { ref, hovered };
 }
 
 export function isDigit(char: string): boolean {
