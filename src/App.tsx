@@ -45,9 +45,10 @@ import {
 } from "lucide-react";
 import "@radix-ui/themes/styles.css";
 import "./App.css";
-import { isDigit, isLetter, useCopy, useDebounce, useHover } from "./utils";
+import { isDigit, isLetter } from "./utils";
 import useResizeObserver from "use-resize-observer";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { useCopy, useDebounce, useHover } from "./hooks";
 
 export const useTheme = () => {
   const [theme, setTheme] = useState<"light" | "dark" | "inherit">("inherit");
@@ -164,6 +165,7 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalyzedResult | null>(
     null
   );
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const theme = useTheme();
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
@@ -217,6 +219,7 @@ function App() {
   }
 
   async function analyzeAsync() {
+    setIsAnalyzing(true);
     if (analysisPassword) {
       let obj: AnalyzedResult = await invoke("analyze", {
         password: analysisPassword,
@@ -230,12 +233,11 @@ function App() {
       obj.crack_times = await invoke("crack_times", {
         password: analysisPassword,
       });
-
-      console.log(obj);
       setAnalysisResult(obj as any);
     } else {
       setAnalysisResult(null);
     }
+    setIsAnalyzing(false);
   }
 
   async function hashAsync() {
@@ -422,20 +424,20 @@ function App() {
                 >
                   <RadioCards.Item value="random">
                     <Flex gap="2" align="center">
-                      <ShuffleIcon size={16} />
+                      <ShuffleIcon size={16} strokeWidth={1} />
                       Random
                     </Flex>
                   </RadioCards.Item>
 
                   <RadioCards.Item value="memorable">
                     <Flex gap="2" align="center">
-                      <LightbulbIcon size={16} />
+                      <LightbulbIcon size={16} strokeWidth={1} />
                       Memorable
                     </Flex>
                   </RadioCards.Item>
                   <RadioCards.Item value="pin">
                     <Flex gap="2" align="center">
-                      <SquareAsteriskIcon size={16} />
+                      <SquareAsteriskIcon size={16} strokeWidth={1} />
                       PIN
                     </Flex>
                   </RadioCards.Item>
@@ -615,31 +617,29 @@ function App() {
                   </Flex>
                 </Card>
                 {passwordType === "random" ? (
-                  <Grid columns="2" my="2">
-                    <DataList.Root orientation="vertical">
-                      <DataList.Item>
+                  <Box my="2">
+                    <DataList.Root>
+                      <DataList.Item align="center">
                         <DataList.Label>Your password strength:</DataList.Label>
                         <DataList.Value>
                           <Badge color={strengthColor}>{strength}</Badge>
                         </DataList.Value>
                       </DataList.Item>
-                    </DataList.Root>
-                    <DataList.Root orientation="vertical">
-                      <DataList.Item>
+                      <DataList.Item align="center">
                         <DataList.Label>
                           Estimated time to crack:
                         </DataList.Label>
                         <DataList.Value>{crackTime}</DataList.Value>
                       </DataList.Item>
                     </DataList.Root>
-                  </Grid>
+                  </Box>
                 ) : null}
                 <Grid columns="2" gap="4" width="auto" my="2">
                   <Button
                     size="3"
                     variant="solid"
                     color={isCopied ? "green" : undefined}
-                    onClick={() => {
+                    onClick={async () => {
                       setHashPassword(password);
                       setAnalysisPassword(password);
                       copy();
@@ -666,35 +666,40 @@ function App() {
               </Flex>
             </Tabs.Content>
             <Tabs.Content value="analyzer">
-              <Flex mb="5" direction="column">
+              <Flex direction="column" mb="3">
                 <TextArea
                   placeholder="Enter or paste password here..."
                   value={analysisPassword}
-                  rows={3}
+                  rows={2}
                   onChange={(e) => setAnalysisPassword(e.currentTarget.value)}
                 />
               </Flex>
-              <Card mb="2" style={{ padding: 0 }}>
-                <Table.Root size="2">
+              <Flex align="center" gap="4" justify="between" pr="2" mb="5">
+                <Text color="gray" size="2">
+                  {analysisResult ? `${analysisResult?.length} Characters` : ""}
+                </Text>
+                <Flex align="center" gap="4">
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      const clipboardText = await readText();
+                      setAnalysisPassword(clipboardText);
+                    }}
+                  >
+                    <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setAnalysisPassword("")}
+                  >
+                    <PaintbrushIcon size={16} strokeWidth={1} /> Clear
+                  </Button>
+                </Flex>
+              </Flex>
+
+              <Flex direction="column" gap="2">
+                <Table.Root variant="surface">
                   <Table.Body>
-                    <Table.Row>
-                      <Table.Cell>Score</Table.Cell>
-                      <Table.Cell>{analysisResult?.score}</Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Strength</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult ? (
-                          <Badge color={getStrengthColor(analysisResult.score)}>
-                            {getStrengthString(analysisResult.score)}
-                          </Badge>
-                        ) : null}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Number of characters</Table.Cell>
-                      <Table.Cell>{analysisResult?.length}</Table.Cell>
-                    </Table.Row>
                     <Table.Row>
                       <Table.Cell>Lowercase letters</Table.Cell>
                       <Table.Cell>
@@ -746,13 +751,29 @@ function App() {
                       </Table.Cell>
                     </Table.Row>
                     <Table.Row>
+                      <Table.Cell>Strength</Table.Cell>
+                      <Table.Cell>
+                        {analysisResult ? (
+                          <Badge color={getStrengthColor(analysisResult.score)}>
+                            {getStrengthString(analysisResult.score)}
+                          </Badge>
+                        ) : (
+                          ""
+                        )}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
                       <Table.Cell>Common password</Table.Cell>
                       <Table.Cell>
-                        {analysisResult
-                          ? analysisResult.is_common
-                            ? "Yes"
-                            : "No"
-                          : ""}
+                        {analysisResult ? (
+                          analysisResult.is_common ? (
+                            <Badge color="red">YES</Badge>
+                          ) : (
+                            <Badge color="green">NO</Badge>
+                          )
+                        ) : (
+                          ""
+                        )}
                       </Table.Cell>
                     </Table.Row>
                     <Table.Row>
@@ -761,22 +782,28 @@ function App() {
                     </Table.Row>
                   </Table.Body>
                 </Table.Root>
-                <Flex></Flex>
-              </Card>
+                <Flex align="center" gap="4" justify="center" height="12px">
+                  {isAnalyzing ? (
+                    <>
+                      <Spinner />
+                      <Text color="gray">analyzing...</Text>
+                    </>
+                  ) : null}
+                </Flex>
+              </Flex>
             </Tabs.Content>
             <Tabs.Content value="hasher">
               <Flex direction="column" gap="3">
                 <TextArea
                   placeholder="Enter or paste password here..."
                   value={hashPassword}
-                  rows={3}
+                  rows={2}
                   onChange={(e) => setHashPassword(e.currentTarget.value)}
                 />
                 <Flex align="center" gap="4" justify="end" pr="2" mb="4">
                   <Flex align="center" gap="4">
                     <Button
                       variant="ghost"
-                      size="1"
                       onClick={async () => {
                         const clipboardText = await readText();
                         setHashPassword(clipboardText);
@@ -784,11 +811,7 @@ function App() {
                     >
                       <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="1"
-                      onClick={() => setHashPassword("")}
-                    >
+                    <Button variant="ghost" onClick={() => setHashPassword("")}>
                       <PaintbrushIcon size={16} strokeWidth={1} /> Clear
                     </Button>
                   </Flex>
@@ -862,7 +885,7 @@ function App() {
                 <TextBox
                   label="Base64"
                   text={base64String}
-                  rows={3}
+                  rows={5}
                   placeholder="Base64 is a binary-to-text encoding scheme."
                 />
                 <Flex align="center" gap="4" justify="center" height="12px">
