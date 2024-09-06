@@ -980,11 +980,17 @@ function TextBox({
         />
         <Box position="absolute" top="2" right="2">
           {hovered && text ? (
-            <IconButton size="2" onClick={() => copyToClipboard(text)}>
+            <IconButton
+              size="1"
+              radius="large"
+              color={isCopied ? "green" : undefined}
+              onClick={() => copyToClipboard(text)}
+              variant="solid"
+            >
               {isCopied ? (
-                <CheckIcon size={16} strokeWidth={1} />
+                <CheckIcon size={12} strokeWidth={1.5} />
               ) : (
-                <CopyIcon size={16} strokeWidth={1} />
+                <CopyIcon size={12} strokeWidth={1.5} />
               )}
             </IconButton>
           ) : null}
