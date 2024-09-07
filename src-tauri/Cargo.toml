@@ -1,6 +1,6 @@
 [package]
 name = "passwords-app"
-version = "0.1.0"
+version = "0.1.1"
 description = "A random password generator"
 authors = ["hiql<dev.hiql@icloud.com>"]
 edition = "2021"
