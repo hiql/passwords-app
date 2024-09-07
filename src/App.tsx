@@ -36,10 +36,10 @@ import {
   ClipboardPasteIcon,
   CopyIcon,
   DraftingCompassIcon,
+  EraserIcon,
   FlaskConicalIcon,
   HashIcon,
   LightbulbIcon,
-  PaintbrushIcon,
   ShieldCheckIcon,
   ShuffleIcon,
   SignatureIcon,
@@ -158,11 +158,13 @@ function App() {
   const [strengthColor, setStrengthColor] =
     useState<BadgeProps["color"]>(undefined);
   const [crackTime, setCrackTime] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [password, setPassword] = useState("");
   const [hashPassword, setHashPassword] = useState("");
   const [md5String, setMd5String] = useState("");
   const [md5Uppercase, setMd5Uppercase] = useState(false);
   const [bcryptString, setBcryptString] = useState("");
+  const [bcryptRounds, setBcryptRounds] = useState(10);
   const [base64String, setBase64String] = useState("");
   const [shaType, setShaType] = useState("256");
   const [sha1String, setSha1String] = useState("");
@@ -176,6 +178,13 @@ function App() {
     null
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const randomLengthDebounce = useDebounce(randomLength, 300);
+  const memorableLengthDebounce = useDebounce(memorableLength, 300);
+  const pinLengthDebounce = useDebounce(pinLength, 300);
+  const hashDebounce = useDebounce(hashPassword, 400);
+  const analyzeDebounce = useDebounce(analysisPassword, 400);
+  const bcryptRoundsDebounce = useDebounce(bcryptRounds, 300);
 
   const theme = useTheme();
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
@@ -200,6 +209,7 @@ function App() {
     setStrength(getStrengthString(score));
     setStrengthColor(getStrengthColor(score));
     setCrackTime(time);
+    setIsGenerating(false);
     resetCopyStatus();
   }
 
@@ -218,6 +228,7 @@ function App() {
       )
       .join(memorableSeparator === "" ? " " : memorableSeparator);
     setPassword(pass);
+    setIsGenerating(false);
     resetCopyStatus();
   }
 
@@ -227,6 +238,7 @@ function App() {
         length: pinLength,
       })
     );
+    setIsGenerating(false);
     resetCopyStatus();
   }
 
@@ -249,8 +261,17 @@ function App() {
     setIsAnalyzing(false);
   }
 
+  async function bcryptAsync(password: string, rounds: number) {
+    if (password) {
+      const value: string = await invoke("bcrypt", {
+        password,
+        rounds,
+      });
+      setBcryptString(value);
+    }
+  }
+
   async function hashAsync() {
-    setIsCalculating(true);
     if (hashPassword) {
       setMd5String(
         await invoke("md5", {
@@ -265,6 +286,7 @@ function App() {
       setBcryptString(
         await invoke("bcrypt", {
           password: hashPassword,
+          rounds: bcryptRounds,
         })
       );
       setSha1String(
@@ -305,13 +327,11 @@ function App() {
     setIsCalculating(false);
   }
 
-  const hash = useDebounce(hashPassword, 400);
-  const analyze = useDebounce(analysisPassword, 400);
-
   useEffect(() => {
+    setIsGenerating(true);
     gen_random_password();
   }, [
-    randomLength,
+    randomLengthDebounce,
     randomNumbers,
     randomSymbols,
     randomUppercase,
@@ -319,9 +339,10 @@ function App() {
   ]);
 
   useEffect(() => {
+    setIsGenerating(true);
     gen_words();
   }, [
-    memorableLength,
+    memorableLengthDebounce,
     memorableCapitalize,
     memorableUppercase,
     memorableUseFullWords,
@@ -329,16 +350,23 @@ function App() {
   ]);
 
   useEffect(() => {
+    setIsGenerating(true);
     gen_pin();
-  }, [pinLength]);
+  }, [pinLengthDebounce]);
 
   useEffect(() => {
+    setIsCalculating(true);
     hashAsync();
-  }, [hash]);
+  }, [hashDebounce]);
 
   useEffect(() => {
     analyzeAsync();
-  }, [analyze]);
+  }, [analyzeDebounce]);
+
+  useEffect(() => {
+    bcryptAsync(hashPassword, bcryptRounds);
+    setIsCalculating(false);
+  }, [bcryptRoundsDebounce]);
 
   const copy = async () => {
     await copyToClipboard(password);
@@ -346,10 +374,13 @@ function App() {
 
   useEffect(() => {
     if (passwordType === "random") {
+      setIsGenerating(true);
       gen_random_password();
     } else if (passwordType === "memorable") {
+      setIsGenerating(true);
       gen_words();
     } else if (passwordType === "pin") {
+      setIsGenerating(true);
       gen_pin();
     }
   }, [passwordType]);
@@ -374,7 +405,7 @@ function App() {
       accentColor={storedValue as ThemeProps["accentColor"]}
       grayColor="slate"
     >
-      <Box ref={ref}>
+      <Box ref={ref} data-tauri-drag-region>
         <Box
           height="30px"
           data-tauri-drag-region
@@ -424,7 +455,7 @@ function App() {
               </Flex>
             </Tabs.Trigger>
           </Tabs.List>
-          <Box px="5" py="4">
+          <Box px="5" py="4" data-tauri-drag-region>
             <Tabs.Content value="generator">
               <Flex direction="column" gap="2">
                 <Text weight="medium">Choose a password type</Text>
@@ -654,8 +685,6 @@ function App() {
                     variant="solid"
                     color={isCopied ? "green" : undefined}
                     onClick={async () => {
-                      setHashPassword(password);
-                      setAnalysisPassword(password);
                       copy();
                     }}
                   >
@@ -665,145 +694,31 @@ function App() {
                     size="3"
                     variant="outline"
                     onClick={() => {
-                      passwordType === "random"
-                        ? gen_random_password()
-                        : passwordType === "memorable"
-                        ? gen_words()
-                        : passwordType === "pin"
-                        ? gen_pin()
-                        : null;
+                      if (passwordType === "random") {
+                        setIsGenerating(true);
+                        gen_random_password();
+                      } else if (passwordType === "memorable") {
+                        setIsGenerating(true);
+                        gen_words();
+                      } else if (passwordType === "pin") {
+                        setIsGenerating(true);
+                        gen_pin();
+                      }
                     }}
                   >
                     Refresh Password
                   </Button>
                 </Grid>
               </Flex>
-            </Tabs.Content>
-            <Tabs.Content value="analyzer">
-              <Flex direction="column" mb="3">
-                <TextArea
-                  placeholder="Enter or paste password here..."
-                  value={analysisPassword}
-                  rows={2}
-                  onChange={(e) => setAnalysisPassword(e.currentTarget.value)}
-                />
-              </Flex>
-              <Flex align="center" gap="4" justify="between" pr="2" mb="5">
-                <Text color="gray" size="2">
-                  {analysisResult ? `${analysisResult?.length} Characters` : ""}
-                </Text>
-                <Flex align="center" gap="4">
-                  <Button
-                    variant="ghost"
-                    onClick={async () => {
-                      const clipboardText = await readText();
-                      setAnalysisPassword(clipboardText);
-                    }}
-                  >
-                    <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setAnalysisPassword("")}
-                  >
-                    <PaintbrushIcon size={16} strokeWidth={1} /> Clear
-                  </Button>
-                </Flex>
-              </Flex>
-
-              <Flex direction="column" gap="2">
-                <Table.Root variant="surface">
-                  <Table.Body>
-                    <Table.Row>
-                      <Table.Cell>Lowercase letters</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.lowercase_letters_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Uppercase letters</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.uppercase_letters_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Numbers</Table.Cell>
-                      <Table.Cell>{analysisResult?.numbers_count}</Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Spaces</Table.Cell>
-                      <Table.Cell>{analysisResult?.spaces_count}</Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Symbols</Table.Cell>
-                      <Table.Cell>{analysisResult?.symbols_count}</Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Other characters</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.other_characters_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Consecutive repeated characters</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.consecutive_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>
-                        Non consecutive repeated characters
-                      </Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.non_consecutive_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Progressive characters</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult?.progressive_count}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Strength</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult ? (
-                          <Badge color={getStrengthColor(analysisResult.score)}>
-                            {getStrengthString(analysisResult.score)}
-                          </Badge>
-                        ) : (
-                          ""
-                        )}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Common password</Table.Cell>
-                      <Table.Cell>
-                        {analysisResult ? (
-                          analysisResult.is_common ? (
-                            <Badge color="red">YES</Badge>
-                          ) : (
-                            <Badge color="green">NO</Badge>
-                          )
-                        ) : (
-                          ""
-                        )}
-                      </Table.Cell>
-                    </Table.Row>
-                    <Table.Row>
-                      <Table.Cell>Estimated time to crack</Table.Cell>
-                      <Table.Cell>{analysisResult?.crack_times}</Table.Cell>
-                    </Table.Row>
-                  </Table.Body>
-                </Table.Root>
-                <Flex align="center" gap="4" justify="center" height="12px">
-                  {isAnalyzing ? (
-                    <>
-                      <Spinner />
-                      <Text color="gray">analyzing...</Text>
-                    </>
-                  ) : null}
-                </Flex>
+              <Flex align="center" gap="2" justify="center" height="1px" mt="1">
+                {isGenerating ? (
+                  <>
+                    <Spinner size="1" />
+                    <Text color="gray" size="1">
+                      generating...
+                    </Text>
+                  </>
+                ) : null}
               </Flex>
             </Tabs.Content>
             <Tabs.Content value="hasher">
@@ -814,19 +729,22 @@ function App() {
                   rows={2}
                   onChange={(e) => setHashPassword(e.currentTarget.value)}
                 />
-                <Flex align="center" gap="4" justify="end" pr="2" mb="4">
+                <Flex align="center" gap="4" justify="end" pr="2" mb="3">
                   <Flex align="center" gap="4">
                     <Button
                       variant="ghost"
                       onClick={async () => {
                         const clipboardText = await readText();
-                        setHashPassword(clipboardText);
+                        if (clipboardText != hashPassword) {
+                          setIsCalculating(true);
+                          setHashPassword(clipboardText);
+                        }
                       }}
                     >
                       <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
                     </Button>
                     <Button variant="ghost" onClick={() => setHashPassword("")}>
-                      <PaintbrushIcon size={16} strokeWidth={1} /> Clear
+                      <EraserIcon size={16} strokeWidth={1} /> Clear
                     </Button>
                   </Flex>
                 </Flex>
@@ -854,6 +772,30 @@ function App() {
                   label="BCrypt"
                   text={bcryptString}
                   placeholder="BCrypt is a password-hashing function based on the Blowfish cipher."
+                  toolbar={
+                    <Flex align="center" gap="2" width="250px">
+                      <Text size="2" color="gray">
+                        Rounds
+                      </Text>
+                      <Slider
+                        value={[bcryptRounds]}
+                        min={4}
+                        max={12}
+                        size="1"
+                        onValueChange={(value) => {
+                          setIsCalculating(true);
+                          setBcryptRounds(value[0]);
+                        }}
+                      />
+                      <Box width="50px">
+                        <TextField.Root
+                          value={bcryptRounds}
+                          size="1"
+                          readOnly
+                        />
+                      </Box>
+                    </Flex>
+                  }
                 />
                 <TextBox
                   label="SHA"
@@ -902,14 +844,191 @@ function App() {
                   rows={5}
                   placeholder="Base64 is a binary-to-text encoding scheme."
                 />
-                <Flex align="center" gap="4" justify="center" height="12px">
+                <Flex
+                  align="center"
+                  gap="2"
+                  justify="center"
+                  height="1px"
+                  mt="1"
+                >
                   {isCalculating ? (
                     <>
-                      <Spinner />
-                      <Text color="gray">calculating...</Text>
+                      <Spinner size="1" />
+                      <Text color="gray" size="1">
+                        calculating...
+                      </Text>
                     </>
                   ) : null}
                 </Flex>
+              </Flex>
+            </Tabs.Content>
+            <Tabs.Content value="analyzer">
+              <Flex direction="column" mb="3">
+                <TextArea
+                  placeholder="Enter or paste password here..."
+                  value={analysisPassword}
+                  rows={2}
+                  onChange={(e) => setAnalysisPassword(e.currentTarget.value)}
+                />
+              </Flex>
+              <Flex align="center" gap="4" justify="end" pr="2" mb="3">
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    const clipboardText = await readText();
+                    if (clipboardText !== analysisPassword) {
+                      setIsAnalyzing(true);
+                      setAnalysisPassword(clipboardText);
+                    }
+                  }}
+                >
+                  <ClipboardPasteIcon size={16} strokeWidth={1} /> Paste
+                </Button>
+                <Button variant="ghost" onClick={() => setAnalysisPassword("")}>
+                  <EraserIcon size={16} strokeWidth={1} /> Clear
+                </Button>
+              </Flex>
+              <Flex direction="column" gap="4">
+                <Table.Root variant="surface">
+                  <Table.Body>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Number of characters</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.length}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Lowercase letters</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.lowercase_letters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Uppercase letters</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.uppercase_letters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Numbers</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.numbers_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Spaces</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.spaces_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Symbols</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.symbols_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Other characters</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.other_characters_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">
+                          Consecutive repeated characters
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.consecutive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">
+                          Non consecutive repeated characters
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.non_consecutive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Progressive characters</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.progressive_count}
+                      </Table.Cell>
+                    </Table.Row>
+                  </Table.Body>
+                </Table.Root>
+                <Table.Root variant="surface">
+                  <Table.Body>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Strength</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult ? (
+                          <Badge color={getStrengthColor(analysisResult.score)}>
+                            {getStrengthString(analysisResult.score)}
+                          </Badge>
+                        ) : (
+                          ""
+                        )}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Common password</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult ? (
+                          analysisResult.is_common ? (
+                            <Badge color="red">YES</Badge>
+                          ) : (
+                            <Badge color="green">NO</Badge>
+                          )
+                        ) : (
+                          ""
+                        )}
+                      </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                      <Table.Cell>
+                        <Text color="gray">Estimated time to crack</Text>
+                      </Table.Cell>
+                      <Table.Cell align="right">
+                        {analysisResult?.crack_times}
+                      </Table.Cell>
+                    </Table.Row>
+                  </Table.Body>
+                </Table.Root>
+              </Flex>
+              <Flex align="center" gap="2" justify="center" height="1px" mt="3">
+                {isAnalyzing ? (
+                  <>
+                    <Spinner size="1" />
+                    <Text color="gray" size="1">
+                      analyzing...
+                    </Text>
+                  </>
+                ) : null}
               </Flex>
             </Tabs.Content>
             <Tabs.Content value="principles">

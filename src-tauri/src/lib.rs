@@ -122,8 +122,8 @@ fn md5(password: &str) -> String {
 }
 
 #[tauri::command]
-fn bcrypt(password: &str) -> String {
-    bcrypt::hash(&password, 10).unwrap()
+fn bcrypt(password: &str, rounds: u32) -> String {
+    bcrypt::hash(&password, rounds).unwrap()
 }
 
 #[tauri::command]
