@@ -1,7 +1,8 @@
 import { ReactNode, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { UnlistenFn } from "@tauri-apps/api/event";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import useResizeObserver from "use-resize-observer";
 import {
   Flex,
   Theme,
@@ -26,6 +27,8 @@ import {
   RadioGroup,
   Spinner,
   Table,
+  ButtonProps,
+  ThemeProps,
 } from "@radix-ui/themes";
 import {
   BookOpenIcon,
@@ -46,36 +49,44 @@ import {
 import "@radix-ui/themes/styles.css";
 import "./App.css";
 import { isDigit, isLetter } from "./utils";
-import useResizeObserver from "use-resize-observer";
-import { readText } from "@tauri-apps/plugin-clipboard-manager";
-import { useCopy, useDebounce, useHover } from "./hooks";
+import {
+  useCopy,
+  useDebounce,
+  useHover,
+  useLocalStorage,
+  useTheme,
+} from "./hooks";
 
-export const useTheme = () => {
-  const [theme, setTheme] = useState<"light" | "dark" | "inherit">("inherit");
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-
-    (async () => {
-      setTheme((await getCurrentWindow().theme()) || "inherit");
-
-      unlisten = await getCurrentWindow().onThemeChanged(
-        ({ payload: theme }) => {
-          console.log(`theme changed to ${theme}`);
-          setTheme(theme);
-        }
-      );
-    })();
-
-    return () => {
-      if (unlisten != null) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  return theme;
-};
+const ACCENT_COLOR_KEY = "passwords-app-accent-color";
+const DEFAULT_ACCENT_COLOR = "indigo";
+const COLORS: ButtonProps["color"][] = [
+  "gray",
+  "gold",
+  "bronze",
+  "brown",
+  "yellow",
+  "amber",
+  "orange",
+  "tomato",
+  "red",
+  "ruby",
+  "crimson",
+  "pink",
+  "plum",
+  "purple",
+  "violet",
+  "iris",
+  "indigo",
+  "blue",
+  "cyan",
+  "teal",
+  "jade",
+  "green",
+  "grass",
+  "lime",
+  "mint",
+  "sky",
+];
 
 const getStrengthString = (score: number): string => {
   if (score >= 0 && score < 20) {
@@ -135,12 +146,11 @@ function App() {
   const [randomSymbols, setRandomSymbols] = useState(false);
   const [randomNumbers, setRandomNumbers] = useState(true);
   const [randomUppercase, setRandomUppercase] = useState(true);
-  const [randomExcludeSimilarCharacters, setRandomExcludeSimilarCharacters] =
+  const [randomExcludeSimilarChars, setRandomExcludeSimilarChars] =
     useState(false);
   const [memorableLength, setMemorableLength] = useState(4);
   const [memorableUseFullWords, setMemorableUseFullWords] = useState(true);
-  const [memorableCapitalizeFirstLetter, setMemorableCapitalizeFirstLetter] =
-    useState(false);
+  const [memorableCapitalize, setMemorableCapitalize] = useState(false);
   const [memorableUppercase, setMemorableUppercase] = useState(false);
   const [memorableSeparator, setMemorableSeparator] = useState("-");
   const [pinLength, setPinLength] = useState(6);
@@ -169,26 +179,27 @@ function App() {
 
   const theme = useTheme();
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
+  const [storedValue, setValue] = useLocalStorage(
+    ACCENT_COLOR_KEY,
+    DEFAULT_ACCENT_COLOR
+  );
 
-  async function random_password() {
+  async function gen_random_password() {
     const pass: string = await invoke("gen_password", {
       length: randomLength,
       symbols: randomSymbols,
       numbers: randomNumbers,
       uppercase: randomUppercase,
-      excludeSimilarCharacters: randomExcludeSimilarCharacters,
+      excludeSimilarCharacters: randomExcludeSimilarChars,
     });
-    setPassword(pass as string);
-
     const score: number = await invoke("score", { password: pass });
+    const time: string = await invoke("crack_times", {
+      password: pass,
+    });
+    setPassword(pass);
     setStrength(getStrengthString(score));
     setStrengthColor(getStrengthColor(score));
-
-    const time: string = await invoke("crack_times", {
-      password,
-    });
     setCrackTime(time);
-
     resetCopyStatus();
   }
 
@@ -201,7 +212,7 @@ function App() {
       .map((w) =>
         memorableUppercase
           ? w.toUpperCase()
-          : memorableCapitalizeFirstLetter
+          : memorableCapitalize
           ? w.charAt(0).toUpperCase() + w.slice(1)
           : w
       )
@@ -210,11 +221,12 @@ function App() {
     resetCopyStatus();
   }
 
-  async function pin() {
-    const pass: string = await invoke("gen_pin", {
-      length: pinLength,
-    });
-    setPassword(pass);
+  async function gen_pin() {
+    setPassword(
+      await invoke("gen_pin", {
+        length: pinLength,
+      })
+    );
     resetCopyStatus();
   }
 
@@ -224,16 +236,13 @@ function App() {
       let obj: AnalyzedResult = await invoke("analyze", {
         password: analysisPassword,
       });
-
-      const score: number = await invoke("score", {
+      obj.score = await invoke("score", {
         password: analysisPassword,
       });
-      obj.score = score;
-
       obj.crack_times = await invoke("crack_times", {
         password: analysisPassword,
       });
-      setAnalysisResult(obj as any);
+      setAnalysisResult(obj);
     } else {
       setAnalysisResult(null);
     }
@@ -243,73 +252,54 @@ function App() {
   async function hashAsync() {
     setIsCalculating(true);
     if (hashPassword) {
-      const md5: string = await invoke("md5", {
-        password: hashPassword,
-      });
-      setMd5String(md5);
+      setMd5String(
+        await invoke("md5", {
+          password: hashPassword,
+        })
+      );
+      setBase64String(
+        await invoke("base64", {
+          password: hashPassword,
+        })
+      );
+      setBcryptString(
+        await invoke("bcrypt", {
+          password: hashPassword,
+        })
+      );
+      setSha1String(
+        await invoke("sha1", {
+          password: hashPassword,
+        })
+      );
+      setSha224String(
+        await invoke("sha224", {
+          password: hashPassword,
+        })
+      );
+      setSha256String(
+        await invoke("sha256", {
+          password: hashPassword,
+        })
+      );
+      setSha384String(
+        await invoke("sha384", {
+          password: hashPassword,
+        })
+      );
+      setSha512String(
+        await invoke("sha512", {
+          password: hashPassword,
+        })
+      );
     } else {
       setMd5String("");
-    }
-
-    if (hashPassword) {
-      const base64: string = await invoke("base64", {
-        password: hashPassword,
-      });
-      setBase64String(base64);
-    } else {
       setBase64String("");
-    }
-    if (hashPassword) {
-      const bcrypt: string = await invoke("bcrypt", {
-        password: hashPassword,
-      });
-      setBcryptString(bcrypt);
-    } else {
       setBcryptString("");
-    }
-
-    if (hashPassword) {
-      const sha1: string = await invoke("sha1", {
-        password: hashPassword,
-      });
-      setSha1String(sha1);
-    } else {
       setSha1String("");
-    }
-
-    if (hashPassword) {
-      const sha224: string = await invoke("sha224", {
-        password: hashPassword,
-      });
-      setSha224String(sha224);
-    } else {
       setSha224String("");
-    }
-
-    if (hashPassword) {
-      const sha256: string = await invoke("sha256", {
-        password: hashPassword,
-      });
-      setSha256String(sha256);
-    } else {
       setSha256String("");
-    }
-
-    if (hashPassword) {
-      const sha384: string = await invoke("sha384", {
-        password: hashPassword,
-      });
-      setSha384String(sha384);
-    } else {
       setSha384String("");
-    }
-
-    if (hashPassword) {
-      const sha512: string = await invoke("sha512", {
-        password: hashPassword,
-      });
-      setSha512String(sha512);
-    } else {
       setSha512String("");
     }
     setIsCalculating(false);
@@ -319,27 +309,27 @@ function App() {
   const analyze = useDebounce(analysisPassword, 400);
 
   useEffect(() => {
-    random_password();
+    gen_random_password();
   }, [
     randomLength,
     randomNumbers,
     randomSymbols,
     randomUppercase,
-    randomExcludeSimilarCharacters,
+    randomExcludeSimilarChars,
   ]);
 
   useEffect(() => {
     gen_words();
   }, [
     memorableLength,
-    memorableCapitalizeFirstLetter,
+    memorableCapitalize,
     memorableUppercase,
     memorableUseFullWords,
     memorableSeparator,
   ]);
 
   useEffect(() => {
-    pin();
+    gen_pin();
   }, [pinLength]);
 
   useEffect(() => {
@@ -356,11 +346,11 @@ function App() {
 
   useEffect(() => {
     if (passwordType === "random") {
-      random_password();
+      gen_random_password();
     } else if (passwordType === "memorable") {
       gen_words();
     } else if (passwordType === "pin") {
-      pin();
+      gen_pin();
     }
   }, [passwordType]);
 
@@ -379,13 +369,36 @@ function App() {
   return (
     <Theme
       appearance={theme}
-      hasBackground={false}
+      hasBackground={true}
       panelBackground="translucent"
+      accentColor={storedValue as ThemeProps["accentColor"]}
+      grayColor="slate"
     >
       <Box ref={ref}>
-        <Box height="35px" data-tauri-drag-region></Box>
+        <Box
+          height="30px"
+          data-tauri-drag-region
+          style={{
+            backgroundColor:
+              theme === "light"
+                ? "whitesmoke"
+                : theme === "dark"
+                ? "black"
+                : "",
+          }}
+        ></Box>
         <Tabs.Root value={panelType} onValueChange={setPanelType}>
-          <Tabs.List justify="center">
+          <Tabs.List
+            justify="center"
+            style={{
+              backgroundColor:
+                theme === "light"
+                  ? "whitesmoke"
+                  : theme === "dark"
+                  ? "black"
+                  : "",
+            }}
+          >
             <Tabs.Trigger value="generator">
               <Flex gap="2" align="center">
                 <WandIcon size={16} />
@@ -421,6 +434,7 @@ function App() {
                   value={passwordType}
                   onValueChange={setPasswordType}
                   my="2"
+                  gap="3"
                 >
                   <RadioCards.Item value="random">
                     <Flex gap="2" align="center">
@@ -488,8 +502,8 @@ function App() {
                         Exclude similar characters(iI1loO0"'`|)
                       </Text>
                       <Switch
-                        checked={randomExcludeSimilarCharacters}
-                        onCheckedChange={setRandomExcludeSimilarCharacters}
+                        checked={randomExcludeSimilarChars}
+                        onCheckedChange={setRandomExcludeSimilarChars}
                       />
                     </Flex>
                   </Flex>
@@ -520,9 +534,9 @@ function App() {
                     <Flex gap="4" align="center">
                       <Text color="gray">Capitalize</Text>
                       <Switch
-                        checked={memorableCapitalizeFirstLetter}
+                        checked={memorableCapitalize}
                         onCheckedChange={(checked) => {
-                          setMemorableCapitalizeFirstLetter(checked);
+                          setMemorableCapitalize(checked);
                           if (checked) {
                             setMemorableUppercase(false);
                           }
@@ -534,7 +548,7 @@ function App() {
                         onCheckedChange={(checked) => {
                           setMemorableUppercase(checked);
                           if (checked) {
-                            setMemorableCapitalizeFirstLetter(false);
+                            setMemorableCapitalize(false);
                           }
                         }}
                       />
@@ -652,11 +666,11 @@ function App() {
                     variant="outline"
                     onClick={() => {
                       passwordType === "random"
-                        ? random_password()
+                        ? gen_random_password()
                         : passwordType === "memorable"
                         ? gen_words()
                         : passwordType === "pin"
-                        ? pin()
+                        ? gen_pin()
                         : null;
                     }}
                   >
@@ -899,8 +913,8 @@ function App() {
               </Flex>
             </Tabs.Content>
             <Tabs.Content value="principles">
-              <Flex direction="column" gap="4" p="4">
-                <Heading size="6" mb="4">
+              <Flex direction="column" gap="2" p="2">
+                <Heading size="6" mb="2">
                   The principles of generating a strong password
                 </Heading>
                 <Flex gap="4" align="center">
@@ -909,7 +923,7 @@ function App() {
                     Make it unique
                   </Heading>
                 </Flex>
-                <Text size="3" color="gray">
+                <Text size="3" color="gray" mb="2">
                   Passwords should be unique to different accounts. This reduces
                   the likelihood that multiple accounts of yours could be hacked
                   if one of your passwords is exposed in a data breach.
@@ -920,7 +934,7 @@ function App() {
                     Make it random
                   </Heading>
                 </Flex>
-                <Text size="3" color="gray">
+                <Text size="3" color="gray" mb="2">
                   The password has a combination of uppercase and lowercase
                   letters, numbers, special characters, and words with no
                   discernable pattern, unrelated to your personal information.
@@ -931,14 +945,27 @@ function App() {
                     Make it long
                   </Heading>
                 </Flex>
-                <Text size="3" color="gray">
+                <Text size="3" color="gray" mb="2">
                   The password consists of 14 characters or longer. An
                   8-character password will take a hacker 39 minutes to crack
                   while a 16-character password will take a hacker a billion
                   years to crack.
                 </Text>
               </Flex>
-              <Flex align="center" justify="center" p="4">
+              <Flex gap="2" wrap="wrap" align="center" justify="center" my="4">
+                {COLORS.map((color) => (
+                  <IconButton
+                    color={color}
+                    size="1"
+                    value={color}
+                    key={color}
+                    onClick={(e) => {
+                      setValue(e.currentTarget.value);
+                    }}
+                  ></IconButton>
+                ))}
+              </Flex>
+              <Flex align="center" justify="center" p="2">
                 <ShieldCheckIcon size={32} color="gray" strokeWidth={1} />
               </Flex>
             </Tabs.Content>
