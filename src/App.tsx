@@ -1,5 +1,4 @@
 import { ReactNode, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import useResizeObserver from "use-resize-observer";
@@ -29,10 +28,12 @@ import {
   Table,
   ButtonProps,
   ThemeProps,
+  Tooltip,
 } from "@radix-ui/themes";
 import {
   BookOpenIcon,
   CheckIcon,
+  CircleHelpIcon,
   ClipboardPasteIcon,
   CopyIcon,
   DraftingCompassIcon,
@@ -56,6 +57,7 @@ import {
   useLocalStorage,
   useTheme,
 } from "./hooks";
+import natives, { AnalyzedResult } from "./natives";
 
 const ACCENT_COLOR_KEY = "passwords-app-accent-color";
 const DEFAULT_ACCENT_COLOR = "indigo";
@@ -122,23 +124,6 @@ const getStrengthColor = (score: number): BadgeProps["color"] | undefined => {
   }
 };
 
-interface AnalyzedResult {
-  password: string;
-  length: number;
-  spaces_count: number;
-  numbers_count: number;
-  lowercase_letters_count: number;
-  uppercase_letters_count: number;
-  symbols_count: number;
-  other_characters_count: number;
-  consecutive_count: number;
-  non_consecutive_count: number;
-  progressive_count: number;
-  is_common: boolean;
-  crack_times?: string;
-  score: number;
-}
-
 function App() {
   const [panelType, setPanelType] = useState("generator");
   const [passwordType, setPasswordType] = useState("random");
@@ -148,6 +133,7 @@ function App() {
   const [randomUppercase, setRandomUppercase] = useState(true);
   const [randomExcludeSimilarChars, setRandomExcludeSimilarChars] =
     useState(false);
+  const [randomStrict, setRandomStrict] = useState(true);
   const [memorableLength, setMemorableLength] = useState(4);
   const [memorableUseFullWords, setMemorableUseFullWords] = useState(true);
   const [memorableCapitalize, setMemorableCapitalize] = useState(false);
@@ -179,12 +165,12 @@ function App() {
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const randomLengthDebounce = useDebounce(randomLength, 300);
-  const memorableLengthDebounce = useDebounce(memorableLength, 300);
-  const pinLengthDebounce = useDebounce(pinLength, 300);
+  const randomLengthDebounce = useDebounce(randomLength, 200);
+  const memorableLengthDebounce = useDebounce(memorableLength, 200);
+  const pinLengthDebounce = useDebounce(pinLength, 200);
   const hashDebounce = useDebounce(hashPassword, 400);
   const analyzeDebounce = useDebounce(analysisPassword, 400);
-  const bcryptRoundsDebounce = useDebounce(bcryptRounds, 300);
+  const bcryptRoundsDebounce = useDebounce(bcryptRounds, 200);
 
   const theme = useTheme();
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
@@ -193,18 +179,19 @@ function App() {
     DEFAULT_ACCENT_COLOR
   );
 
-  async function gen_random_password() {
-    const pass: string = await invoke("gen_password", {
+  async function generateRandomPassword() {
+    const pass: string = await natives.generatePassword({
       length: randomLength,
       symbols: randomSymbols,
       numbers: randomNumbers,
       uppercase: randomUppercase,
+      lowercase: true,
+      spaces: false,
       excludeSimilarCharacters: randomExcludeSimilarChars,
+      strict: randomStrict,
     });
-    const score: number = await invoke("score", { password: pass });
-    const time: string = await invoke("crack_times", {
-      password: pass,
-    });
+    const score: number = await natives.score(pass);
+    const time: string = await natives.crackTimes(pass);
     setPassword(pass);
     setStrength(getStrengthString(score));
     setStrengthColor(getStrengthColor(score));
@@ -213,11 +200,11 @@ function App() {
     resetCopyStatus();
   }
 
-  async function gen_words() {
-    const words: string[] = await invoke("gen_words", {
-      length: memorableLength,
-      fullWords: memorableUseFullWords,
-    });
+  async function generateWords() {
+    const words: string[] = await natives.generateWords(
+      memorableLength,
+      memorableUseFullWords
+    );
     let pass = words
       .map((w) =>
         memorableUppercase
@@ -232,12 +219,8 @@ function App() {
     resetCopyStatus();
   }
 
-  async function gen_pin() {
-    setPassword(
-      await invoke("gen_pin", {
-        length: pinLength,
-      })
-    );
+  async function generatePin() {
+    setPassword(await natives.generatePin(pinLength));
     setIsGenerating(false);
     resetCopyStatus();
   }
@@ -245,15 +228,9 @@ function App() {
   async function analyzeAsync() {
     setIsAnalyzing(true);
     if (analysisPassword) {
-      let obj: AnalyzedResult = await invoke("analyze", {
-        password: analysisPassword,
-      });
-      obj.score = await invoke("score", {
-        password: analysisPassword,
-      });
-      obj.crack_times = await invoke("crack_times", {
-        password: analysisPassword,
-      });
+      let obj: AnalyzedResult = await natives.analyze(analysisPassword);
+      obj.score = await natives.score(analysisPassword);
+      obj.crack_times = await natives.crackTimes(analysisPassword);
       setAnalysisResult(obj);
     } else {
       setAnalysisResult(null);
@@ -263,57 +240,21 @@ function App() {
 
   async function bcryptAsync(password: string, rounds: number) {
     if (password) {
-      const value: string = await invoke("bcrypt", {
-        password,
-        rounds,
-      });
+      const value: string = await natives.bcrypt(password, rounds);
       setBcryptString(value);
     }
   }
 
   async function hashAsync() {
     if (hashPassword) {
-      setMd5String(
-        await invoke("md5", {
-          password: hashPassword,
-        })
-      );
-      setBase64String(
-        await invoke("base64", {
-          password: hashPassword,
-        })
-      );
-      setBcryptString(
-        await invoke("bcrypt", {
-          password: hashPassword,
-          rounds: bcryptRounds,
-        })
-      );
-      setSha1String(
-        await invoke("sha1", {
-          password: hashPassword,
-        })
-      );
-      setSha224String(
-        await invoke("sha224", {
-          password: hashPassword,
-        })
-      );
-      setSha256String(
-        await invoke("sha256", {
-          password: hashPassword,
-        })
-      );
-      setSha384String(
-        await invoke("sha384", {
-          password: hashPassword,
-        })
-      );
-      setSha512String(
-        await invoke("sha512", {
-          password: hashPassword,
-        })
-      );
+      setMd5String(await natives.md5(hashPassword));
+      setBase64String(await natives.base64(hashPassword));
+      setBcryptString(await natives.bcrypt(hashPassword, bcryptRounds));
+      setSha1String(await natives.sha1(hashPassword));
+      setSha224String(await natives.sha224(hashPassword));
+      setSha256String(await natives.sha256(hashPassword));
+      setSha384String(await natives.sha384(hashPassword));
+      setSha512String(await natives.sha512(hashPassword));
     } else {
       setMd5String("");
       setBase64String("");
@@ -329,18 +270,19 @@ function App() {
 
   useEffect(() => {
     setIsGenerating(true);
-    gen_random_password();
+    generateRandomPassword();
   }, [
     randomLengthDebounce,
     randomNumbers,
     randomSymbols,
     randomUppercase,
     randomExcludeSimilarChars,
+    randomStrict,
   ]);
 
   useEffect(() => {
     setIsGenerating(true);
-    gen_words();
+    generateWords();
   }, [
     memorableLengthDebounce,
     memorableCapitalize,
@@ -351,7 +293,7 @@ function App() {
 
   useEffect(() => {
     setIsGenerating(true);
-    gen_pin();
+    generatePin();
   }, [pinLengthDebounce]);
 
   useEffect(() => {
@@ -375,13 +317,13 @@ function App() {
   useEffect(() => {
     if (passwordType === "random") {
       setIsGenerating(true);
-      gen_random_password();
+      generateRandomPassword();
     } else if (passwordType === "memorable") {
       setIsGenerating(true);
-      gen_words();
+      generateWords();
     } else if (passwordType === "pin") {
       setIsGenerating(true);
-      gen_pin();
+      generatePin();
     }
   }, [passwordType]);
 
@@ -529,12 +471,22 @@ function App() {
                     </Flex>
                     <Separator size="4" />
                     <Flex gap="4" align="center" wrap="wrap">
-                      <Text color="gray">
-                        Exclude similar characters(iI1loO0"'`|)
-                      </Text>
+                      <Flex align="center" wrap="wrap" gap="1">
+                        <Text color="gray">Exclude similar characters</Text>
+                        <Tooltip content={"iI1loO0\"'`|"}>
+                          <IconButton variant="ghost" size="1">
+                            <CircleHelpIcon size={16} color="gray" />
+                          </IconButton>
+                        </Tooltip>
+                      </Flex>
                       <Switch
                         checked={randomExcludeSimilarChars}
                         onCheckedChange={setRandomExcludeSimilarChars}
+                      />
+                      <Text color="gray">Strict</Text>
+                      <Switch
+                        checked={randomStrict}
+                        onCheckedChange={setRandomStrict}
                       />
                     </Flex>
                   </Flex>
@@ -696,13 +648,13 @@ function App() {
                     onClick={() => {
                       if (passwordType === "random") {
                         setIsGenerating(true);
-                        gen_random_password();
+                        generateRandomPassword();
                       } else if (passwordType === "memorable") {
                         setIsGenerating(true);
-                        gen_words();
+                        generateWords();
                       } else if (passwordType === "pin") {
                         setIsGenerating(true);
-                        gen_pin();
+                        generatePin();
                       }
                     }}
                   >

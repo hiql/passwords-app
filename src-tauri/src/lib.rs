@@ -15,17 +15,20 @@ fn gen_password(
     numbers: bool,
     symbols: bool,
     uppercase: bool,
+    lowercase: bool,
+    spaces: bool,
     exclude_similar_characters: bool,
+    strict: bool,
 ) -> String {
     let pg = PasswordGenerator {
         length,
         numbers,
-        lowercase_letters: true,
+        lowercase_letters: lowercase,
         uppercase_letters: uppercase,
         symbols,
-        spaces: false,
+        spaces,
         exclude_similar_characters,
-        strict: true,
+        strict,
     };
     pg.generate_one().unwrap()
 }
