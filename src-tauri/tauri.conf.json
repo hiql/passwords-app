@@ -1,4 +1,5 @@
 {
+  "$schema": "https://schema.tauri.app/config/2.0.0",
   "productName": "Passwords",
   "version": "0.1.1",
   "identifier": "com.github.hiql.passwords-app",

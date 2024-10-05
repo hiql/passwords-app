@@ -4,12 +4,10 @@
   "description": "Capability for the main window",
   "windows": ["main"],
   "permissions": [
-    "core:app:default",
-    "core:window:default",
+    "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
     "core:window:allow-theme",
-    "core:event:default",
     "core:event:allow-listen",
     "shell:allow-open",
     "clipboard-manager:default",
