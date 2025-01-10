@@ -161,7 +161,7 @@ function App() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [analysisPassword, setAnalysisPassword] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AnalyzedResult | null>(
-    null
+    null,
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -176,7 +176,7 @@ function App() {
   const { isCopied, copyToClipboard, resetCopyStatus } = useCopy();
   const [storedThemeColorValue, setThemeColorValue] = useLocalStorage(
     ACCENT_COLOR_KEY,
-    DEFAULT_ACCENT_COLOR
+    DEFAULT_ACCENT_COLOR,
   );
 
   async function generateRandomPassword() {
@@ -203,15 +203,15 @@ function App() {
   async function generateWords() {
     const words: string[] = await natives.generateWords(
       memorableLength,
-      memorableUseFullWords
+      memorableUseFullWords,
     );
     let pass = words
       .map((w) =>
         memorableUppercase
           ? w.toUpperCase()
           : memorableCapitalize
-          ? w.charAt(0).toUpperCase() + w.slice(1)
-          : w
+            ? w.charAt(0).toUpperCase() + w.slice(1)
+            : w,
       )
       .join(memorableSeparator === "" ? " " : memorableSeparator);
     setPassword(pass);
@@ -338,6 +338,18 @@ function App() {
       }
     },
   });
+ 
+  useEffect(() => {
+    // disable context menu
+    document.addEventListener(
+      "contextmenu",
+      (e) => {
+        e.preventDefault();
+        return false;
+      },
+      { capture: true },
+    );
+  }, []);
 
   return (
     <Theme
@@ -356,8 +368,8 @@ function App() {
               theme === "light"
                 ? "whitesmoke"
                 : theme === "dark"
-                ? "black"
-                : "",
+                  ? "black"
+                  : "",
           }}
         ></Box>
         <Tabs.Root value={panelType} onValueChange={setPanelType}>
@@ -368,8 +380,8 @@ function App() {
                 theme === "light"
                   ? "whitesmoke"
                   : theme === "dark"
-                  ? "black"
-                  : "",
+                    ? "black"
+                    : "",
             }}
           >
             <Tabs.Trigger value="generator">
@@ -605,14 +617,14 @@ function App() {
                               isDigit(char)
                                 ? "blue"
                                 : isLetter(char)
-                                ? undefined
-                                : "orange"
+                                  ? undefined
+                                  : "orange"
                             }
                             weight="medium"
                           >
                             {char}
                           </Text>
-                        )
+                        ),
                       )}
                     </Flex>
                   </Flex>
@@ -759,28 +771,28 @@ function App() {
                     shaType === "1"
                       ? sha1String
                       : shaType === "224"
-                      ? sha224String
-                      : shaType === "256"
-                      ? sha256String
-                      : shaType === "384"
-                      ? sha384String
-                      : shaType === "512"
-                      ? sha512String
-                      : ""
+                        ? sha224String
+                        : shaType === "256"
+                          ? sha256String
+                          : shaType === "384"
+                            ? sha384String
+                            : shaType === "512"
+                              ? sha512String
+                              : ""
                   }
                   rows={3}
                   placeholder={
                     shaType === "1"
                       ? "SHA1 has a 160-bit hash output which corresponds to a 40 character string."
                       : shaType === "224"
-                      ? "SHA224 is a hashing function that creates a unique 224-bit hash with 56 characters long for every string."
-                      : shaType === "256"
-                      ? "SHA256 is a hashing function that creates a unique 256-bit hash with 64 characters long for every string."
-                      : shaType === "384"
-                      ? "SHA384 is a hashing function that creates a unique 384-bit hash with 96 characters long for every string."
-                      : shaType === "512"
-                      ? "SHA512 is a hashing function that creates a unique 512-bit hash with 128 characters long for every string."
-                      : ""
+                        ? "SHA224 is a hashing function that creates a unique 224-bit hash with 56 characters long for every string."
+                        : shaType === "256"
+                          ? "SHA256 is a hashing function that creates a unique 256-bit hash with 64 characters long for every string."
+                          : shaType === "384"
+                            ? "SHA384 is a hashing function that creates a unique 384-bit hash with 96 characters long for every string."
+                            : shaType === "512"
+                              ? "SHA512 is a hashing function that creates a unique 512-bit hash with 128 characters long for every string."
+                              : ""
                   }
                   toolbar={
                     <RadioGroup.Root value={shaType} onValueChange={setShaType}>
