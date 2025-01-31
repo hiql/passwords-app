@@ -3,7 +3,7 @@ use passwords::{analyzer, scorer, PasswordGenerator};
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 use zxcvbn::zxcvbn;
 
 mod syllables;
@@ -205,16 +205,15 @@ pub fn run() {
             app.set_menu(menu)?;
             app.on_menu_event(move |app, event| {
                 if event.id() == github.id() {
-                    let _ = app
-                        .shell()
-                        .open("https://github.com/hiql/passwords-app", None);
+                    app.opener()
+                    .open_url("https://github.com/hiql/passwords-app", None::<&str>)
+                    .unwrap();
                 }
             });
-
             Ok(())
         })
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             gen_password,
             gen_pin,
