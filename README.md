@@ -1,4 +1,4 @@
-<img src="passwords.png" alt="image" width="128" height="auto">
+<img src="app-icon.png" alt="image" width="128" height="auto">
 
 # Passwords
 
