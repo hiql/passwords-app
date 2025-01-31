@@ -22,20 +22,6 @@ A random password generator
   - Common password check
   - Estimate the time to crack
 
-## Tech Stacks
-
-Tauri + React + Radix UI + Typescript + Rust
-
-## App Icon
-
-```shell
-
-npm install -g @uosjs/icon-builder
-
-uosjs-icon-builder --input=passwords.png --output=./dist/icons/
-
-```
-
 ## License
 
 MIT
