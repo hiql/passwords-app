@@ -18330,8 +18330,8 @@ const WORDS: &[&str] = &[
 ];
 
 pub fn rand() -> &'static str {
-    let mut rng = rand::thread_rng();
-    let n: usize = rng.gen_range(0..WORDS.len());
+    let mut rng = rand::rng();
+    let n: usize = rng.random_range(0..WORDS.len());
     WORDS.get(n).unwrap()
 }
 
